@@ -215,7 +215,8 @@ class JTFS(AcousticFeature):
                                                  T=T,
                                                  J_fr=J_fr,
                                                  Q_fr=Q_fr,
-                                                 F=F)
+                                                 F=F,
+                                                 format="time")
         self.to_device(device)
         self.global_avg = global_avg
 
@@ -242,3 +243,4 @@ class JTFS(AcousticFeature):
         if self.global_avg:
             fts = fts.mean(dim=-1)
         return fts
+    

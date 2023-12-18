@@ -94,6 +94,7 @@ class TestScat1D(unittest.TestCase):
 
     def test_output_size(self):
         st_test = Scattering1D(shape=N, J=J, Q=(Q1, Q2), T=T)
+        print(f"output size: {st_test.output_size(detail=True)}")
         self.assertEqual(st.transform.output_size(detail=True),
                          st_test.output_size(detail=True))
 
@@ -119,7 +120,9 @@ class TestJTFS(unittest.TestCase):
                                              T=T,
                                              J_fr=J_fr,
                                              Q_fr=Q_fr,
-                                             F=F)
+                                             F=F,
+                                             format="time")
+        print(f"output size: {jtfst_test.output_size(detail=True)}")
         self.assertEqual(jtfst.transform.output_size(detail=True),
                          jtfst_test.output_size(detail=True))
 
