@@ -9,6 +9,12 @@ import torch
 from torch import Tensor
 
 
+def normalize_audio(audio: np.ndarray, eps: float = 1e-10):
+    max_val = max(np.abs(audio).max(), eps)
+
+    return audio / max_val
+
+
 # Audio playback ###############################################################
 
 def display_audio(data, sr=16000):
