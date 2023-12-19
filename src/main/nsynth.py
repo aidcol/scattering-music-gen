@@ -19,24 +19,29 @@
 # SOFTWARE.
 
 import json
-import random
 from glob import glob
 from os import path
 from typing import Optional, List, Dict
 
-import math
+from operator import itemgetter
 import librosa
 import torch
 from torch import dtype as torch_dtype
-from torch.utils import data
+from torch.utils.data import Dataset, DataLoader
+
+from utils import normalize_audio
 
 
-class NSynthDataset(data.Dataset):
+# path to nsynth data dir
+ROOT = "C:\\Users\\aidan\\source\\datasets\\nsynth-full"
+
+
+class NSynthDataset(Dataset):
     """
     Dataset to handle the NSynth data in json/wav format.
     """
 
-    def __init__(self, root: str, subset: str = 'train',
+    def __init__(self, root: str = ROOT, subset: str = 'train',
                  families: Optional[List[str]] = None,
                  sources: Optional[List[str]] = None,
                  dtype: torch_dtype = torch.float32, mono: bool = True):
@@ -106,67 +111,37 @@ class NSynthDataset(data.Dataset):
             raw = raw[None, ...]
         attrs['audio'] = torch.tensor(raw, dtype=self.dtype)
         return attrs
-
+    
 
 class AudioOnlyNSynthDataset(NSynthDataset):
-    def __init__(self, *args, crop: Optional[int] = None, **kwargs):
+    def __init__(self, *args, targets: Optional[List[str]] = None, **kwargs):
         super(AudioOnlyNSynthDataset, self).__init__(*args, **kwargs)
-        self.crop = crop
+        target_set = set(["instrument_source", "instrument_family", 
+                        "pitch", "velocity"]) 
+        for target in targets:
+            assert target in target_set
+        self.targets = targets
 
     def __getitem__(self, item: int):
         attrs = super(AudioOnlyNSynthDataset, self).__getitem__(item)
-        # Make a random crop if given
-        if self.crop:
-            pivot = random.randint(0, attrs['audio'].shape[1] - self.crop)
-            attrs['audio'] = attrs['audio'][:, pivot:pivot + self.crop]
-        # μ-Law gives us range [-128, 128]
-        # Input is in range [-1, 1]
-        # The loss CrossEntropy Targets are range [0, 255]
-        audio = encode_μ_law(attrs['audio'])
-        audio_scaled = audio / 128
-        audio_target = (audio.squeeze() + 128).long()
-        return audio_scaled, audio_target
+        audio = normalize_audio(attrs['audio'])
+        audio_target = None
+        if self.targets:
+            audio_target = itemgetter(*self.targets)(attrs)
+        return audio, audio_target
 
 
-def make_loaders(data_dir: str, subsets: List[str], nbatch: int,
-                 crop: int = 6144, families: Optional[List[str]] = None,
-                 sources: Optional[List[str]] = None) \
-        -> Dict[str, data.DataLoader]:
-    """
-    Make a dictionary of data loaders for the given subsets.
-    :param data_dir: Location of the Dataset
-    :param subsets: subsets to make datasets for
-    :param nbatch: batch size
-    :param crop: length of the cropped samples
-    :param families: families of instruments to select
-    :param sources: sources of instruments to select
-    :return:
-    """
+def make_loaders(subsets: List[str], nbatch: int,
+                 targets: Optional[List[str]] = None,
+                 families: Optional[List[str]] = None,
+                 sources: Optional[List[str]] = None) -> Dict[str, DataLoader]:
     data_loaders = dict()
     for subset in subsets:
-        dset = AudioOnlyNSynthDataset(root=data_dir, subset=subset,
-                                      families=families, sources=sources,
-                                      crop=crop)
-        data_loaders[subset] = data.DataLoader(
-            dset, batch_size=nbatch, num_workers=8, shuffle=True)
+        dset = AudioOnlyNSynthDataset(root=ROOT, 
+                                      subset=subset,
+                                      families=families, 
+                                      sources=sources,
+                                      targets=targets)
+        data_loaders[subset] = DataLoader(dset, batch_size=nbatch, 
+                                          num_workers=4, shuffle=True)
     return data_loaders
-
-
-def encode_μ_law(x: torch.Tensor, μ: int = 255, cast: bool = False)\
-        -> torch.Tensor:
-    """
-    Encodes the input tensor element-wise with μ-law encoding
-
-    Args:
-        x: tensor
-        μ: the size of the encoding (number of possible classes)
-        cast: whether to cast to int8
-
-    Returns:
-
-    """
-    out = torch.sign(x) * torch.log(1 + μ * torch.abs(x)) / math.log(1 + μ)
-    out = torch.floor(out * math.ceil(μ / 2))
-    if cast:
-        out = out.type(torch.int8)
-    return out
