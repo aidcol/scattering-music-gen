@@ -29,7 +29,7 @@ import torch
 from torch import dtype as torch_dtype
 from torch.utils.data import Dataset, DataLoader
 
-from utils import normalize_audio
+from .utils import normalize_audio
 
 
 # path to nsynth data dir
